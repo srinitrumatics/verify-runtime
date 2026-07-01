@@ -12,10 +12,20 @@ plugins.
 pip install verify-runtime
 verify init        # scaffold a starter verification.yaml (+ verification/plugins/)
 verify             # run the gate (exit 0 pass / 1 gate fail / 2 harness error)
-verify --list      # targets + stages
+verify --list      # targets + stages, each with its resolution source (local/plugin/builtin)
+verify --json report.json   # also emit a machine-readable JSON report
+verify --html report.html   # write a self-contained HTML dashboard (composite, stages, findings, trend)
+verify --fix       # deterministic remediation; --fix --ai for Claude patches (preview), --apply to write
+verify --github    # emit GitHub Actions annotations for findings (auto-on when GITHUB_ACTIONS=true)
+verify --history   # record this run to .verify/history.db (or set history.enabled: true in config)
+
+verify doctor      # health check: runtime/python versions, config, entry points, tool availability
+verify plugins     # show installed + local evaluators and each configured stage's source
+verify history     # recent runs + composite trend from the history db
 verify selftest    # run every registered self-test suite (this package + installed plugins)
-verify --fix       # deterministic remediation; --fix --ai for Claude-generated patches (preview), --apply to write
 ```
+
+Consumers should add `.verify/` (the default history-db location) to their `.gitignore`.
 
 ## Configuration (`verification.yaml`)
 
