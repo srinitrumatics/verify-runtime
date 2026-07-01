@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata as im
 import json
 import os
+import pkgutil
+import shutil
 import sys
 from pathlib import Path
 from typing import Optional
@@ -51,6 +54,54 @@ def _find_config(start: Path) -> Path:
         if c.exists():
             return c
     raise SystemExit("verify: no verification.yaml found (run `verify init`)")
+
+
+def _find_config_or_none(start: Path) -> Optional[Path]:
+    for d in [start, *start.parents]:
+        c = d / "verification.yaml"
+        if c.exists():
+            return c
+    return None
+
+
+def _parse_runtime_spec(spec: str):
+    import re
+    m = re.match(r"\s*(>=|<=|==|>|<)?\s*([0-9][0-9.]*)\s*$", spec)
+    if not m:
+        return None
+    op = m.group(1) or ">="
+    ver = tuple(int(x) for x in m.group(2).split("."))
+    return op, ver
+
+
+def _version_tuple(v: str):
+    parts = []
+    for x in v.split("."):
+        digits = "".join(c for c in x if c.isdigit())
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts)
+
+
+def _satisfies_runtime(installed: str, spec: str) -> Optional[bool]:
+    parsed = _parse_runtime_spec(spec)
+    if parsed is None:
+        return None
+    op, ver = parsed
+    iv = _version_tuple(installed)
+    n = max(len(iv), len(ver))
+    iv = iv + (0,) * (n - len(iv))
+    ver = ver + (0,) * (n - len(ver))
+    if op == ">=":
+        return iv >= ver
+    if op == "<=":
+        return iv <= ver
+    if op == "==":
+        return iv == ver
+    if op == ">":
+        return iv > ver
+    if op == "<":
+        return iv < ver
+    return None  # pragma: no cover
 
 
 _STARTER = """version: 2
@@ -103,6 +154,198 @@ def cmd_selftest(only):
     return 0 if ok and suites else 1
 
 
+def cmd_doctor(argv: list[str]) -> int:
+    from verify_runtime import __version__
+
+    color_enabled = (
+        "--no-color" not in argv
+        and os.environ.get("NO_COLOR") is None
+        and sys.stdout.isatty()
+    )
+    p = Palette(color_enabled)
+    problems = 0
+    lines = [p.bold("verify doctor"), ""]
+
+    lines.append(f"Runtime:        verify-runtime {__version__}")
+    lines.append(
+        f"Python:         {sys.version.split()[0]} "
+        f"({'.'.join(str(x) for x in sys.version_info[:3])})"
+    )
+
+    config_path = _find_config_or_none(Path.cwd())
+    rules: dict = {}
+    root = Path.cwd()
+    config_ok = True
+
+    if config_path is None:
+        lines.append("Configuration:  no verification.yaml found (run `verify init`)")
+    else:
+        lines.append(f"Configuration:  found {config_path}")
+        try:
+            rules = load_yaml(config_path) or {}
+            lines.append("                parses OK")
+        except Exception as e:
+            config_ok = False
+            problems += 1
+            lines.append(p.red(f"                FAILED to parse: {e}"))
+        root = (config_path.parent / ((rules.get("project") or {}).get("root", "."))).resolve()
+
+        runtime_spec = rules.get("runtime")
+        if runtime_spec:
+            sat = _satisfies_runtime(__version__, str(runtime_spec))
+            if sat is None:
+                lines.append(
+                    p.yellow(f"                runtime floor '{runtime_spec}' could not be "
+                             f"parsed (warning)"))
+            elif sat:
+                lines.append(f"                runtime floor '{runtime_spec}' satisfied")
+            else:
+                problems += 1
+                lines.append(p.red(
+                    f"                runtime floor '{runtime_spec}' NOT satisfied by "
+                    f"installed {__version__}"))
+
+    lines.append("")
+    lines.append("Plugins (installed):")
+    dist_evaluators: dict[str, list[str]] = {}
+    for ep in im.entry_points(group="verify.evaluators"):
+        dist_name = getattr(ep.dist, "name", None) or "?"
+        dist_evaluators.setdefault(dist_name, []).append(ep.name)
+    if dist_evaluators:
+        for dist_name in sorted(dist_evaluators):
+            lines.append(f"  - {dist_name}: {', '.join(sorted(dist_evaluators[dist_name]))}")
+    else:
+        lines.append("  (none found)")
+
+    lines.append("")
+    lines.append("Entry points:")
+    selftest_names = sorted(ep.name for ep in im.entry_points(group="verify.selftests"))
+    if selftest_names:
+        lines.append(f"  PASS  verify.selftests resolves: {', '.join(selftest_names)}")
+    else:
+        problems += 1
+        lines.append(p.red("  FAIL  verify.selftests group has no entries"))
+
+    if config_path is not None and config_ok:
+        stages = stages_config(rules)
+        resolved: list[tuple[str, str]] = []
+        unresolved: list[str] = []
+        for name, cfg in stages.items():
+            cfg = cfg or {}
+            try:
+                source, _ = resolve_source(cfg.get("module", name), rules, root)
+                resolved.append((name, source))
+            except FileNotFoundError:
+                unresolved.append(name)
+        if stages:
+            for name, source in resolved:
+                lines.append(f"    {name:<14} -> {source}")
+            if unresolved:
+                problems += len(unresolved)
+                lines.append(p.red(f"  FAIL  unresolved stage module(s): {', '.join(unresolved)}"))
+            else:
+                lines.append(f"  PASS  all {len(stages)} configured stage module(s) resolve")
+
+    lines.append("")
+    lines.append("Environment:")
+    python_path = shutil.which("python") or shutil.which("python3")
+    lines.append(f"  python:  {'found' if python_path else 'MISSING'} ({python_path or '-'})")
+    if config_path is not None and config_ok:
+        needs_npm = False
+        needs_php = False
+        for cfg in stages_config(rules).values():
+            cfg = cfg or {}
+            for cmd in (cfg.get("commands") or {}).values():
+                if isinstance(cmd, str):
+                    stripped = cmd.strip()
+                    if stripped.startswith("npm"):
+                        needs_npm = True
+                    if stripped.startswith("php"):
+                        needs_php = True
+        if needs_npm:
+            npm_path = shutil.which("npm")
+            lines.append(f"  npm:     {'found' if npm_path else 'MISSING (optional)'} ({npm_path or '-'})")
+        if needs_php:
+            php_path = shutil.which("php")
+            lines.append(f"  php:     {'found' if php_path else 'MISSING (optional)'} ({php_path or '-'})")
+    key_set = bool(os.environ.get("ANTHROPIC_API_KEY"))
+    lines.append(f"  ANTHROPIC_API_KEY: {'set' if key_set else 'not set (informational; affects AI stages)'}")
+
+    lines.append("")
+    if problems:
+        lines.append(p.red(f"doctor: PROBLEMS FOUND ({problems})"))
+    else:
+        lines.append(p.green("doctor: PASS"))
+
+    print("\n".join(lines))
+    return 1 if problems else 0
+
+
+def cmd_plugins(argv: list[str]) -> int:
+    from verify_runtime import evaluators as evaluators_pkg
+
+    color_enabled = (
+        "--no-color" not in argv
+        and os.environ.get("NO_COLOR") is None
+        and sys.stdout.isatty()
+    )
+    p = Palette(color_enabled)
+    lines = [p.bold("verify plugins"), ""]
+
+    lines.append("Installed:")
+    dist_evaluators: dict[str, list[str]] = {}
+    for ep in im.entry_points(group="verify.evaluators"):
+        dist_name = getattr(ep.dist, "name", None) or "?"
+        dist_evaluators.setdefault(dist_name, []).append(ep.name)
+    for dist_name in sorted(dist_evaluators):
+        lines.append(f"  {dist_name}: {', '.join(sorted(dist_evaluators[dist_name]))}")
+
+    builtin_names = sorted(
+        m.name for m in pkgutil.iter_modules(evaluators_pkg.__path__)
+        if not m.name.startswith("_")
+    )
+    lines.append(f"  verify-runtime (builtin): {', '.join(builtin_names)}")
+
+    lines.append("")
+    lines.append("Local:")
+    config_path = _find_config_or_none(Path.cwd())
+    rules: dict = {}
+    root = Path.cwd()
+    if config_path is None:
+        lines.append("  no verification.yaml found; no plugin_paths to scan")
+    else:
+        try:
+            rules = load_yaml(config_path) or {}
+        except Exception as e:
+            lines.append(p.red(f"  could not parse {config_path}: {e}"))
+            rules = {}
+        root = (config_path.parent / ((rules.get("project") or {}).get("root", "."))).resolve()
+        plugin_paths = rules.get("plugin_paths") or []
+        found_any = False
+        for rel in plugin_paths:
+            d = root / rel
+            if d.is_dir():
+                for f in sorted(d.glob("*.py")):
+                    found_any = True
+                    lines.append(f"  {f}  (module: {f.stem})")
+        if not found_any:
+            lines.append("  (none found)")
+
+    if config_path is not None and rules:
+        lines.append("")
+        lines.append("Configured stages:")
+        for name, cfg in stages_config(rules).items():
+            cfg = cfg or {}
+            try:
+                source, _ = resolve_source(cfg.get("module", name), rules, root)
+            except FileNotFoundError:
+                source = "unresolved"
+            lines.append(f"  {name:<14} -> {source}")
+
+    print("\n".join(lines))
+    return 0
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "init":
@@ -113,6 +356,10 @@ def main(argv=None):
     if argv and argv[0] == "selftest":
         only = argv[argv.index("--suite") + 1] if "--suite" in argv else None
         return cmd_selftest(only)
+    if argv and argv[0] == "doctor":
+        return cmd_doctor(argv[1:])
+    if argv and argv[0] == "plugins":
+        return cmd_plugins(argv[1:])
 
     args = parse_args(argv)
     _force_utf8()
