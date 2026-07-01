@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - run: pip install -e .
+
+      # The verifier verifies itself: engine, YAML loader, scoring, gate, resolver,
+      # code-output parsers. `verify selftest` runs every registered suite (here,
+      # just this package's, since no plugins are installed in this job).
+      - run: python -m unittest discover -s verify_runtime/tests -v
+      - run: verify selftest
