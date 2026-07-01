@@ -18,7 +18,7 @@ from verify_runtime.core import (
     run_remediation, render_remediation, Palette, _force_utf8,
 )
 from verify_runtime.resolver import resolve_source
-from verify_runtime import history
+from verify_runtime import dashboard, history
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -42,6 +42,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--list", action="store_true", help="list targets/evaluators and exit")
     parser.add_argument("--history", action="store_true",
                         help="record this run to the history db")
+    parser.add_argument("--html", nargs="?", const="verify-report.html", default=None,
+                        metavar="PATH", help="write a self-contained HTML report")
     return parser.parse_args(argv)
 
 
@@ -507,7 +509,7 @@ def main(argv=None):
         sys.stdout.write(render_remediation(p, remediation))
 
     report = None
-    if args.json is not None or history.enabled(rules, args.history):
+    if args.json is not None or args.html is not None or history.enabled(rules, args.history):
         report = build_json_report(project, targets, selected, results, composite, gate)
         if remediation:
             report["remediation"] = remediation
@@ -528,6 +530,21 @@ def main(argv=None):
             log(f"recorded run to history db → {db_path}")
         except Exception as e:
             log(f"warning: failed to record history: {e}")
+
+    if args.html is not None:
+        try:
+            try:
+                trend = history.trend(root, rules)
+            except Exception as e:
+                log(f"warning: failed to load history trend for HTML report: {e}")
+                trend = []
+            html_doc = dashboard.render_html(report, trend)
+            html_out_path = Path(args.html)
+            html_out_path.parent.mkdir(parents=True, exist_ok=True)
+            html_out_path.write_text(html_doc, encoding="utf-8")
+            log(f"wrote HTML report → {html_out_path}")
+        except Exception as e:
+            log(f"warning: failed to write HTML report: {e}")
 
     return 0 if gate["passed"] else 1
 
