@@ -18,6 +18,7 @@ from verify_runtime.core import (
     run_remediation, render_remediation, Palette, _force_utf8,
 )
 from verify_runtime.resolver import resolve_source
+from verify_runtime import history
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -39,6 +40,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--no-color", action="store_true", help="disable ANSI colour")
     parser.add_argument("--quiet", action="store_true", help="hide per-finding detail")
     parser.add_argument("--list", action="store_true", help="list targets/evaluators and exit")
+    parser.add_argument("--history", action="store_true",
+                        help="record this run to the history db")
     return parser.parse_args(argv)
 
 
@@ -346,6 +349,75 @@ def cmd_plugins(argv: list[str]) -> int:
     return 0
 
 
+def _fmt_gate(passed: bool) -> str:
+    return "PASS" if passed else "FAIL"
+
+
+def _fmt_findings(findings: dict) -> str:
+    order = ["critical", "high", "medium", "low", "info"]
+    parts = [f"{k[0].upper()}{findings.get(k, 0)}" for k in order if findings.get(k)]
+    return " ".join(parts) if parts else "none"
+
+
+def _sparkline(series: list[float]) -> str:
+    if not series:
+        return ""
+    blocks = "▁▂▃▄▅▆▇█"
+    lo, hi = min(series), max(series)
+    span = hi - lo
+    if span == 0:
+        return blocks[0] * len(series)
+    out = []
+    for v in series:
+        idx = int((v - lo) / span * (len(blocks) - 1))
+        out.append(blocks[idx])
+    return "".join(out)
+
+
+def cmd_history(argv: list[str]) -> int:
+    _force_utf8()
+    limit = 20
+    if "--limit" in argv:
+        limit = int(argv[argv.index("--limit") + 1])
+    stage = None
+    if "--stage" in argv:
+        stage = argv[argv.index("--stage") + 1]
+
+    config_path = _find_config_or_none(Path.cwd())
+    rules: dict = {}
+    root = Path.cwd()
+    if config_path is not None:
+        try:
+            rules = load_yaml(config_path) or {}
+        except Exception:
+            rules = {}
+        root = (config_path.parent / ((rules.get("project") or {}).get("root", "."))).resolve()
+
+    rows = history.recent(root, rules, limit=limit)
+    if not rows:
+        print("verify history: no history recorded yet "
+              "(run with --history or set history.enabled: true)")
+        return 0
+
+    print(f"{'ts':<26} {'sha':<9} {'composite':>9}  {'gate':<4}  findings")
+    for row in rows:
+        ts = str(row.get("ts") or "")[:25]
+        sha = row.get("git_sha") or "-"
+        composite = row.get("composite")
+        composite_s = f"{composite:.2f}" if composite is not None else "-"
+        gate_s = _fmt_gate(row.get("gate_passed"))
+        findings_s = _fmt_findings(row.get("findings_by_severity") or {})
+        print(f"{ts:<26} {sha:<9} {composite_s:>9}  {gate_s:<4}  {findings_s}")
+
+    series = history.trend(root, rules, stage=stage, limit=limit)
+    if series:
+        label = f"trend ({stage})" if stage else "trend (composite)"
+        values = " ".join(f"{v:.1f}" for v in series)
+        print(f"{label}: {_sparkline(series)}  [{values}]")
+
+    return 0
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "init":
@@ -360,6 +432,8 @@ def main(argv=None):
         return cmd_doctor(argv[1:])
     if argv and argv[0] == "plugins":
         return cmd_plugins(argv[1:])
+    if argv and argv[0] == "history":
+        return cmd_history(argv[1:])
 
     args = parse_args(argv)
     _force_utf8()
@@ -432,10 +506,13 @@ def main(argv=None):
     if remediation:
         sys.stdout.write(render_remediation(p, remediation))
 
-    if args.json is not None:
+    report = None
+    if args.json is not None or history.enabled(rules, args.history):
         report = build_json_report(project, targets, selected, results, composite, gate)
         if remediation:
             report["remediation"] = remediation
+
+    if args.json is not None:
         payload = json.dumps(report, indent=2)
         if args.json == "-":
             print(payload)
@@ -444,6 +521,13 @@ def main(argv=None):
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_text(payload, encoding="utf-8")
             log(f"wrote JSON report → {out_path}")
+
+    if history.enabled(rules, args.history):
+        try:
+            db_path = history.record(root, rules, report)
+            log(f"recorded run to history db → {db_path}")
+        except Exception as e:
+            log(f"warning: failed to record history: {e}")
 
     return 0 if gate["passed"] else 1
 
