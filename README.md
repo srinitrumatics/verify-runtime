@@ -27,6 +27,8 @@ verify selftest    # run every registered self-test suite (this package + instal
 
 Consumers should add `.verify/` (the default history-db location) to their `.gitignore`.
 
+Releasing this package? See **[PUBLISHING.md](PUBLISHING.md)** (build, TestPyPI, PyPI, trusted publishing, git-install fallback).
+
 ## Configuration (`verification.yaml`)
 
 Stages live under `verification:`; each names an evaluator `module:` and its `weight`/`minimum`.
