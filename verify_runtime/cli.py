@@ -18,7 +18,7 @@ from verify_runtime.core import (
     run_remediation, render_remediation, Palette, _force_utf8,
 )
 from verify_runtime.resolver import resolve_source
-from verify_runtime import dashboard, history
+from verify_runtime import annotations, dashboard, history
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -44,6 +44,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         help="record this run to the history db")
     parser.add_argument("--html", nargs="?", const="verify-report.html", default=None,
                         metavar="PATH", help="write a self-contained HTML report")
+    parser.add_argument("--github", action="store_true",
+                        help="emit GitHub Actions annotations for findings to stdout")
     return parser.parse_args(argv)
 
 
@@ -508,8 +510,11 @@ def main(argv=None):
     if remediation:
         sys.stdout.write(render_remediation(p, remediation))
 
+    emit_github = annotations.should_emit(os.environ, args.github)
+
     report = None
-    if args.json is not None or args.html is not None or history.enabled(rules, args.history):
+    if (args.json is not None or args.html is not None
+            or history.enabled(rules, args.history) or emit_github):
         report = build_json_report(project, targets, selected, results, composite, gate)
         if remediation:
             report["remediation"] = remediation
@@ -545,6 +550,13 @@ def main(argv=None):
             log(f"wrote HTML report → {html_out_path}")
         except Exception as e:
             log(f"warning: failed to write HTML report: {e}")
+
+    if emit_github:
+        try:
+            for line in annotations.render_github_annotations(report):
+                print(line)
+        except Exception as e:
+            log(f"warning: failed to emit GitHub annotations: {e}")
 
     return 0 if gate["passed"] else 1
 
