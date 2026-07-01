@@ -14,6 +14,7 @@ from verify_runtime.core import (
     evaluate_gate, render_human, build_json_report,
     run_remediation, render_remediation, Palette, _force_utf8,
 )
+from verify_runtime.resolver import resolve_source
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -148,14 +149,18 @@ def main(argv=None):
         for n, t in targets.items():
             mark = "present" if t.present else "absent"
             print(f"  - {n:<10} {t.kind:<16} [{mark}]  {t.path}")
-        print("stages (phase · weight · minimum):")
+        print("stages (phase · weight · minimum · source):")
         for n, cfg in stages_config(rules).items():
             cfg = cfg or {}
             en = "on " if cfg.get("enabled", True) else "off"
             mn = cfg.get("minimum")
             mn_s = f"min {mn:g}" if mn is not None else "no-min"
+            try:
+                source, _ = resolve_source(cfg.get("module", n), rules, root)
+            except FileNotFoundError:
+                source = "unresolved"
             print(f"  - {n:<14} [{en}] {str(cfg.get('phase','Other')):<16} "
-                  f"w{cfg.get('weight', 1):<3} {mn_s}")
+                  f"w{cfg.get('weight', 1):<3} {mn_s:<7} {source}")
         return 0
 
     only = _csv(args.only)
