@@ -30,6 +30,9 @@ An evaluator is a module exposing `evaluate(ctx) -> {passed, score, summary, fin
 on: `ctx.root`, `ctx.run`, `ctx.which`, `ctx.iter_source_files`, `ctx.read`, `ctx.finding`,
 `ctx.score_from_findings`, `ctx.config`, `ctx.rules`, `ctx.log`, `ctx.target(s)`.
 
+See **[docs/PLUGIN_SDK.md](docs/PLUGIN_SDK.md)** for the full authoring guide (contract, result
+schema, findings, remediation, registration, and a complete worked example).
+
 Register a shareable evaluator via entry points; the runtime resolves a stage's `module:` in the
 order **local `plugin_paths` file → `verify.evaluators` entry point → built-in**:
 
