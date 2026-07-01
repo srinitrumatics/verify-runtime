@@ -35,11 +35,7 @@ def _run_suite(suite: unittest.TestSuite) -> dict:
 
 def aggregate(only: str | None = None) -> dict:
     out: dict[str, dict] = {}
-    try:
-        eps = im.entry_points(group=_EP_GROUP)
-    except TypeError:
-        eps = im.entry_points().get(_EP_GROUP, [])
-    for ep in eps:
+    for ep in im.entry_points(group=_EP_GROUP):
         if only and ep.name != only:
             continue
         if ep.name in _in_progress:

@@ -11,7 +11,7 @@ from typing import Optional
 
 from verify_runtime.core import (
     load_yaml, discover_targets, stages_config, run_evaluators, compute_composite,
-    collect_findings, evaluate_gate, severity_totals, render_human, build_json_report,
+    evaluate_gate, render_human, build_json_report,
     run_remediation, render_remediation, Palette, _force_utf8,
 )
 

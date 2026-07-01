@@ -29,28 +29,13 @@ def _load_path(name: str, file: Path):
     return module
 
 
-def _entry_point(name: str):
-    try:
-        eps = im.entry_points(group=_EP_GROUP)
-    except TypeError:  # py<3.10 compat (unused on 3.11+, kept defensive)
-        eps = im.entry_points().get(_EP_GROUP, [])
-    for ep in eps:
-        if ep.name == name:
-            return ep.load()
-    return None
-
-
 def resolve_source(name: str, rules: dict, root: Path) -> Tuple[str, object]:
     """Return (source_label, module). source_label ∈ {local, plugin:<dist>, builtin}."""
     local = _local_file(name, rules, root)
     if local is not None:
         return "local", _load_path(name, local)
 
-    try:
-        eps = im.entry_points(group=_EP_GROUP)
-    except TypeError:
-        eps = im.entry_points().get(_EP_GROUP, [])
-    for ep in eps:
+    for ep in im.entry_points(group=_EP_GROUP):
         if ep.name == name:
             dist = getattr(ep, "dist", None)
             label = f"plugin:{dist.name}" if dist else "plugin"

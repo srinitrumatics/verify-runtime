@@ -540,7 +540,7 @@ def _ai_remediate(root: Path, results: list[EvalResult], apply: bool,
     """Generate Claude patch suggestions for code findings. Previews a unified
     diff; only writes when ``apply`` is set. No-ops gracefully without a key."""
     try:
-        import _ai  # type: ignore
+        from verify_runtime import ai as _ai
     except Exception:
         return {"actions": [], "changed": False}
 
