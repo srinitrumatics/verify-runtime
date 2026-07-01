@@ -4,10 +4,10 @@ via verify_runtime.resolver (local plugin_paths -> entry point -> built-in).
 """
 from __future__ import annotations
 
-import argparse
 import io
 import os
 import subprocess
+import sys
 import time
 import traceback
 from dataclasses import dataclass, field
@@ -483,34 +483,6 @@ def build_json_report(project: str, targets: dict[str, Target], selected: list[s
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
-def parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        prog="verify.py", add_help=True,
-        description="Verification-Driven Development runner")
-    parser.add_argument("--json", nargs="?", const="-", default=None, metavar="PATH",
-                        help="emit JSON report (to PATH, or stdout if no path)")
-    parser.add_argument("--only", default=None, help="comma list of evaluators to run")
-    parser.add_argument("--skip", default=None, help="comma list of evaluators to skip")
-    parser.add_argument("--target", default=None, help="comma list of targets to include")
-    parser.add_argument("--fail-fast", action="store_true", help="stop at first FAIL")
-    parser.add_argument("--fix", action="store_true",
-                        help="auto-remediate: apply safe deterministic fixes, then re-run")
-    parser.add_argument("--ai", action="store_true",
-                        help="with --fix, also generate Claude patches for findings (preview only)")
-    parser.add_argument("--apply", action="store_true",
-                        help="with --fix --ai, actually write the previewed AI patches")
-    parser.add_argument("--no-color", action="store_true", help="disable ANSI colour")
-    parser.add_argument("--quiet", action="store_true", help="hide per-finding detail")
-    parser.add_argument("--list", action="store_true", help="list targets/evaluators and exit")
-    return parser.parse_args(argv)
-
-
-def _csv(value: Optional[str]) -> Optional[set[str]]:
-    if not value:
-        return None
-    return {x.strip() for x in value.split(",") if x.strip()}
-
-
 def run_remediation(rules: dict, root: Path, targets: dict[str, Target],
                     selected: list[str], results: list[EvalResult],
                     ai: bool, apply: bool, log: Callable[[str], None]) -> dict:
@@ -535,7 +507,7 @@ def run_remediation(rules: dict, root: Path, targets: dict[str, Target],
             continue
         module_name = cfg.get("module", name)
         try:
-            module = load_evaluator(module_name)
+            module = load_evaluator(module_name, rules=rules, root=root)
         except Exception:
             continue
         if not hasattr(module, "remediate"):
@@ -653,4 +625,13 @@ def render_remediation(p: Palette, remediation: dict) -> str:
         buf.write("\n")
     buf.write("\n")
     return buf.getvalue()
+
+
+def _force_utf8() -> None:
+    """Windows consoles default to cp1252 and choke on the report glyphs."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        except Exception:
+            pass
 
