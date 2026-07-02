@@ -67,7 +67,13 @@ git push origin vX.Y.Z
 ## Trusted Publishing (OIDC, recommended for CI)
 
 Avoid long-lived tokens: on PyPI, add a *pending publisher* for this repo/workflow, then
-publish from a tag with no secrets:
+publish from a tag with no secrets.
+
+Because the workflow below scopes to a GitHub environment, that name must line up in **three**
+places or the OIDC claim is rejected: set **Environment name** = `pypi` on the PyPI pending
+publisher, create a `pypi` environment under repo **Settings → Environments**, and keep the
+job's `environment:` key matching. Leave all three blank if you'd rather not gate on an
+environment.
 
 ```yaml
 # .github/workflows/publish.yml
