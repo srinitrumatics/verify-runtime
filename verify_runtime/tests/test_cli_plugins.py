@@ -30,8 +30,17 @@ class TestPlugins(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertIn("build", out)
             self.assertIn("tests", out)
-            self.assertIn("spec", out)
-            self.assertIn("verify-plugin-speckit", out)
+            # speckit is an optional plugin — the base package's CI installs no
+            # plugins, so only assert its stages when it's actually installed.
+            import importlib.metadata as im
+            try:
+                im.version("verify-plugin-speckit")
+                speckit_installed = True
+            except im.PackageNotFoundError:
+                speckit_installed = False
+            if speckit_installed:
+                self.assertIn("spec", out)
+                self.assertIn("verify-plugin-speckit", out)
 
     def test_plugins_no_config(self):
         with tempfile.TemporaryDirectory() as d:
