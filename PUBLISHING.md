@@ -1,7 +1,8 @@
 # Publishing verify-runtime
 
-`verify-runtime` is the base package — publish it **before** `verify-plugin-speckit`
-(the plugin depends on `verify-runtime>=1.0`). Standard PEP 517 build + Twine upload.
+`verify-runtime` is the base package — publish it **before**
+`verify-plugin-speckit` (the plugin depends on `verify-runtime>=1.0`).
+Standard PEP 517 build + Twine upload.
 
 ## Prerequisites
 
@@ -9,17 +10,19 @@
 python -m pip install --upgrade build twine
 ```
 
-- A PyPI account, and for the package name a project you own (or a first upload that
-  claims it). Names must be free — `verify-runtime`/`verify-plugin-speckit` may need
-  adjusting if taken (update `[project].name` and the plugin's dependency string together).
-- An **API token** (`pypi-…`) from https://pypi.org/manage/account/token/, or configure
-  [Trusted Publishing](#trusted-publishing-oidc-recommended-for-ci) for CI.
+- A PyPI account, and for the package name a project you own (or a first upload
+  that claims it). Names must be free —
+  `verify-runtime`/`verify-plugin-speckit` may need adjusting if taken (update
+  `[project].name` and the plugin's dependency string together).
+- An **API token** (`pypi-…`) from https://pypi.org/manage/account/token/, or
+  configure [Trusted Publishing](#trusted-publishing-oidc-recommended-for-ci)
+  for CI.
 
 ## 1. Bump the version
 
 Edit `[project].version` in `pyproject.toml` (semver). Keep `__version__` in
-`verify_runtime/__init__.py` in sync — it's what `verify doctor` / the `runtime:` floor
-check report.
+`verify_runtime/__init__.py` in sync — it's what `verify doctor` / the
+`runtime:` floor check report.
 
 ```bash
 grep -n 'version' pyproject.toml verify_runtime/__init__.py
@@ -68,14 +71,14 @@ git push origin vX.Y.Z
 
 ## Trusted Publishing (OIDC, recommended for CI)
 
-Avoid long-lived tokens: on PyPI, add a *pending publisher* for this repo/workflow, then
-publish from a tag with no secrets.
+Avoid long-lived tokens: on PyPI, add a *pending publisher* for this
+repo/workflow, then publish from a tag with no secrets.
 
-Because the workflow below scopes to a GitHub environment, that name must line up in **three**
-places or the OIDC claim is rejected: set **Environment name** = `pypi` on the PyPI pending
-publisher, create a `pypi` environment under repo **Settings → Environments**, and keep the
-job's `environment:` key matching. Leave all three blank if you'd rather not gate on an
-environment.
+Because the workflow below scopes to a GitHub environment, that name must line
+up in **three** places or the OIDC claim is rejected: set **Environment name**
+= `pypi` on the PyPI pending publisher, create a `pypi` environment under repo
+**Settings → Environments**, and keep the job's `environment:` key matching.
+Leave all three blank if you'd rather not gate on an environment.
 
 ```yaml
 # .github/workflows/publish.yml
@@ -101,15 +104,15 @@ jobs:
 
 ## Pre-publish alternative — install straight from Git
 
-Until it's on PyPI, consumers (including the `ai_dashboard` CI workflow) can install from a
-tag or branch:
+Until it's on PyPI, consumers (including the `ai_dashboard` CI workflow) can
+install from a tag or branch:
 
 ```bash
 pip install "git+https://github.com/srinitrumatics/verify-runtime@vX.Y.Z"
 ```
 
-Tag as in step 5; no build/upload needed. This is the fallback already noted in the consumer
-workflow's install step.
+Tag as in step 5; no build/upload needed. This is the fallback already noted in
+the consumer workflow's install step.
 
 ## Release checklist
 
