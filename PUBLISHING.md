@@ -78,6 +78,7 @@ on:
 jobs:
   pypi:
     runs-on: ubuntu-latest
+    environment: pypi         # must match the environment name on the PyPI pending publisher
     permissions:
       id-token: write        # required for OIDC trusted publishing
     steps:
