@@ -21,7 +21,7 @@ That is a complete, working plugin.
 should use nothing else:
 
 | Member | What it gives you |
-|--------|-------------------|
+| --- | --- |
 | `ctx.root` | `pathlib.Path` of the project root |
 | `ctx.config` | this stage's YAML block (a dict) — your tunables live here |
 | `ctx.rules` | the whole parsed `verification.yaml` (e.g. `severity_weights`) |
@@ -72,7 +72,7 @@ ctx.finding("high", "dependency advisory: CVE-2026-…", file="backend", line=No
   `severity_weights` in config (defaults: 40/20/8/2/0). `critical` also blocks the gate by
   default (`gate.block_on_severity`).
 - `file` / `line` are optional but recommended — they drive editor links and
-  [GitHub PR annotations](#github-annotations).
+  GitHub PR annotations.
 - Any other keyword becomes a field on the finding (surfaced in `--json`).
 
 ### Scoring
