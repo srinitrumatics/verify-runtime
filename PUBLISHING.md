@@ -81,6 +81,7 @@ jobs:
     environment: pypi         # must match the environment name on the PyPI pending publisher
     permissions:
       id-token: write        # required for OIDC trusted publishing
+      contents: read         # an explicit permissions block zeroes all unlisted scopes; checkout needs this
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
