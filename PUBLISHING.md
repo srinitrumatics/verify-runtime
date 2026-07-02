@@ -28,8 +28,9 @@ grep -n 'version' pyproject.toml verify_runtime/__init__.py
 ## 2. Build
 
 ```bash
-rm -rf dist build ./*.egg-info                       # PowerShell: rm -Recurse -Force dist,build,*.egg-info
-python -m build            # produces dist/verify_runtime-X.Y.Z-py3-none-any.whl + .tar.gz
+# PowerShell: rm -Recurse -Force dist,build,*.egg-info
+rm -rf dist build ./*.egg-info
+python -m build            # writes wheel + sdist to dist/
 twine check dist/*         # validates metadata/long-description renders on PyPI
 ```
 
@@ -38,7 +39,8 @@ twine check dist/*         # validates metadata/long-description renders on PyPI
 ```bash
 twine upload --repository testpypi dist/*
 # verify it installs cleanly from TestPyPI in a fresh venv:
-python -m venv /tmp/vr && . /tmp/vr/bin/activate     # Windows: py -m venv %TEMP%\vr && %TEMP%\vr\Scripts\activate
+# Windows: py -m venv %TEMP%\vr && %TEMP%\vr\Scripts\activate
+python -m venv /tmp/vr && . /tmp/vr/bin/activate
 pip install -i https://test.pypi.org/simple/ verify-runtime
 verify selftest && verify --help
 deactivate
@@ -47,7 +49,7 @@ deactivate
 ## 4. Publish to PyPI
 
 ```bash
-twine upload dist/*        # uses ~/.pypirc or TWINE_USERNAME=__token__ TWINE_PASSWORD=pypi-…
+twine upload dist/*        # ~/.pypirc or TWINE_* env vars
 ```
 
 Verify:
@@ -84,17 +86,17 @@ on:
 jobs:
   pypi:
     runs-on: ubuntu-latest
-    environment: pypi         # must match the environment name on the PyPI pending publisher
+    environment: pypi         # must match the PyPI publisher's env name
     permissions:
       id-token: write        # required for OIDC trusted publishing
-      contents: read         # an explicit permissions block zeroes all unlisted scopes; checkout needs this
+      contents: read     # unlisted scopes default to none; checkout reads
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install build && python -m build
-      - run: pip install dist/*.whl && verify selftest  # gate: never publish an artifact that fails its own suite
-      - uses: pypa/gh-action-pypi-publish@release/v1   # no username/password needed
+      - run: pip install dist/*.whl && verify selftest  # gate before upload
+      - uses: pypa/gh-action-pypi-publish@release/v1  # no secrets needed
 ```
 
 ## Pre-publish alternative — install straight from Git
