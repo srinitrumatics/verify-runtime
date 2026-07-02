@@ -14,8 +14,8 @@ python -m pip install --upgrade build twine
   that claims it). Names must be free —
   `verify-runtime`/`verify-plugin-speckit` may need adjusting if taken (update
   `[project].name` and the plugin's dependency string together).
-- An **API token** (`pypi-…`) from https://pypi.org/manage/account/token/, or
-  configure [Trusted Publishing](#trusted-publishing-oidc-recommended-for-ci)
+- An **API token** (`pypi-…`) from <https://pypi.org/manage/account/token/>,
+  or configure [Trusted Publishing](#trusted-publishing-oidc-recommended-for-ci)
   for CI.
 
 ## 1. Bump the version
