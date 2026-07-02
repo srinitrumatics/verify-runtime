@@ -28,7 +28,7 @@ grep -n 'version' pyproject.toml verify_runtime/__init__.py
 ## 2. Build
 
 ```bash
-rm -rf dist build ./*.egg-info
+rm -rf dist build ./*.egg-info                       # PowerShell: rm -Recurse -Force dist,build,*.egg-info
 python -m build            # produces dist/verify_runtime-X.Y.Z-py3-none-any.whl + .tar.gz
 twine check dist/*         # validates metadata/long-description renders on PyPI
 ```
@@ -38,7 +38,7 @@ twine check dist/*         # validates metadata/long-description renders on PyPI
 ```bash
 twine upload --repository testpypi dist/*
 # verify it installs cleanly from TestPyPI in a fresh venv:
-python -m venv /tmp/vr && . /tmp/vr/bin/activate
+python -m venv /tmp/vr && . /tmp/vr/bin/activate     # Windows: py -m venv %TEMP%\vr && %TEMP%\vr\Scripts\activate
 pip install -i https://test.pypi.org/simple/ verify-runtime
 verify selftest && verify --help
 deactivate
@@ -94,7 +94,7 @@ Until it's on PyPI, consumers (including the `ai_dashboard` CI workflow) can ins
 tag or branch:
 
 ```bash
-pip install "git+https://github.com/<org>/verify-runtime@vX.Y.Z"
+pip install "git+https://github.com/srinitrumatics/verify-runtime@vX.Y.Z"
 ```
 
 Tag as in step 5; no build/upload needed. This is the fallback already noted in the consumer
