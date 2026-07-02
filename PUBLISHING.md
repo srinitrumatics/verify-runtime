@@ -87,6 +87,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install build && python -m build
+      - run: pip install dist/*.whl && verify selftest  # gate: never publish an artifact that fails its own suite
       - uses: pypa/gh-action-pypi-publish@release/v1   # no username/password needed
 ```
 
